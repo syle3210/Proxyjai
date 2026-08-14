@@ -11,16 +11,14 @@ app.use(express.json({ limit: '50mb' }));
 const NIM_API_KEY = process.env.NIM_API_KEY;
 const NIM_BASE = 'https://integrate.api.nvidia.com/v1';
 
-// Health check
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Private NIM Proxy', time: new Date().toISOString() });
+  res.json({ status: 'ok', service: 'Private NIM Proxy' });
 });
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', keyConfigured: !!NIM_API_KEY });
 });
 
-// Main chat endpoint
 app.post('/v1/chat/completions', async (req, res) => {
   if (!NIM_API_KEY) {
     return res.status(500).json({ error: { message: 'NIM_API_KEY not set' } });
@@ -28,11 +26,8 @@ app.post('/v1/chat/completions', async (req, res) => {
 
   try {
     const body = { ...req.body };
-
-    // Force streaming (very important)
     body.stream = true;
 
-    // Optional: prevent extremely long generations that cause timeouts
     if (!body.max_tokens || body.max_tokens > 4096) {
       body.max_tokens = 2048;
     }
@@ -47,7 +42,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       },
       data: body,
       responseType: 'stream',
-      timeout: 180000, // 3 minutes
+      timeout: 180000,
     });
 
     res.setHeader('Content-Type', 'text/event-stream');
