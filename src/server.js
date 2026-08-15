@@ -32,6 +32,13 @@ app.post('/v1/chat/completions', async (req, res) => {
       body.max_tokens = 2048;
     }
 
+    // Enable thinking for Gemma models
+    if (body.model && body.model.toLowerCase().includes('gemma')) {
+      body.chat_template_kwargs = {
+        enable_thinking: true
+      };
+    }
+
     const response = await axios({
       method: 'post',
       url: `${NIM_BASE}/chat/completions`,
