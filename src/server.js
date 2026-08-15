@@ -26,18 +26,22 @@ app.post('/v1/chat/completions', async (req, res) => {
 
   try {
     const body = { ...req.body };
-    body.stream = true;
 
-    if (!body.max_tokens || body.max_tokens > 4096) {
-      body.max_tokens = 2048;
+    // Better defaults for Nemotron / roleplay
+    if (!body.temperature || body.temperature < 0.8) {
+      body.temperature = 0.95;          // more creative and less formal
     }
 
-    // Enable thinking for Gemma models
-    if (body.model && body.model.toLowerCase().includes('gemma')) {
-      body.chat_template_kwargs = {
-        enable_thinking: true
-      };
+    if (!body.max_tokens || body.max_tokens > 3072) {
+      body.max_tokens = 2300;           // good length without being too slow
     }
+
+    // Slight top_p boost helps Nemotron feel more natural
+    if (!body.top_p) {
+      body.top_p = 0.92;
+    }
+
+    const isStreaming = body.stream === true;
 
     const response = await axios({
       method: 'post',
@@ -45,25 +49,41 @@ app.post('/v1/chat/completions', async (req, res) => {
       headers: {
         'Authorization': `Bearer ${NIM_API_KEY}`,
         'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
+        ...(isStreaming ? { 'Accept': 'text/event-stream' } : {})
       },
       data: body,
-      responseType: 'stream',
-      timeout: 180000,
+      responseType: isStreaming ? 'stream' : 'json',
+      timeout: 120000, // 2 minutes
     });
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (isStreaming) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      response.data.pipe(res);
+    } else {
+      res.json(response.data);
+    }
 
-    response.data.pipe(res);
   } catch (err) {
-    console.error(err.message);
-    res.status(err.response?.status || 500).json({
+    console.error('Proxy error:', err.message);
+
+    const status = err.response?.status || 500;
+    let message = err.message;
+
+    if (err.code === 'ECONNABORTED') {
+      message = 'Request timed out waiting for NVIDIA (free tier is slow)';
+    } else if (err.response?.data) {
+      message = err.response.data.error?.message || JSON.stringify(err.response.data);
+    }
+
+    res.status(status).json({
       error: {
-        message: err.response?.data?.error?.message || err.message || 'Upstream error',
-      },
+        message: message,
+        type: 'upstream_error',
+        code: status
+      }
     });
   }
 });
