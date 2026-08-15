@@ -28,8 +28,8 @@ app.post('/v1/chat/completions', async (req, res) => {
     const body = { ...req.body };
     body.stream = true;
 
-    if (!body.max_tokens || body.max_tokens > 4096) {
-      body.max_tokens = 2048;
+    if (!body.max_tokens || body.max_tokens > 5000) {
+      body.max_tokens = 5000;
     }
 
     // Enable thinking for Gemma models
