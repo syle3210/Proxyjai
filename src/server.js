@@ -26,18 +26,15 @@ app.post('/v1/chat/completions', async (req, res) => {
 
   try {
     const body = { ...req.body };
-    body.stream = true;
 
-    if (!body.max_tokens || body.max_tokens > 5000) {
-      body.max_tokens = 5000;
-    }
-
-    // Enable thinking for Gemma models
+    // Only keep the optional thinking for Gemma (you can delete this block if you want)
     if (body.model && body.model.toLowerCase().includes('gemma')) {
       body.chat_template_kwargs = {
         enable_thinking: true
       };
     }
+
+    const isStreaming = body.stream === true;
 
     const response = await axios({
       method: 'post',
@@ -45,19 +42,23 @@ app.post('/v1/chat/completions', async (req, res) => {
       headers: {
         'Authorization': `Bearer ${NIM_API_KEY}`,
         'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
+        ...(isStreaming ? { 'Accept': 'text/event-stream' } : {})
       },
       data: body,
-      responseType: 'stream',
+      responseType: isStreaming ? 'stream' : 'json',
       timeout: 180000,
     });
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (isStreaming) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      response.data.pipe(res);
+    } else {
+      res.json(response.data);
+    }
 
-    response.data.pipe(res);
   } catch (err) {
     console.error(err.message);
     res.status(err.response?.status || 500).json({
